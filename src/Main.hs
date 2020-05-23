@@ -112,11 +112,17 @@ gameStep g (Move dir) = case dir of
 gameStep g Wait = g
 
 tileFromInt :: Int -> Char
-tileFromInt i | i < 2     = 't'
+tileFromInt i | i < 1     = 't'
               | i < 5     = 'T'
-              | i < 15    = ','
               | otherwise = '.'
 
+stdGenFromPoint :: Point -> StdGen
+stdGenFromPoint (x, y) = mkStdGen ((89 ^ abs (x)) * (97 ^ abs (y))) -- read (show x ++ "," ++ show y) :: StdGen
+
 randomFromPoint :: Int -> Point -> Int
-randomFromPoint max (x, y) =
-  (fst (randomR (0, max - 1) (mkStdGen (x * 123456 + y)) :: (Int, StdGen)))
+randomFromPoint max p = fst (randomR (0, max - 1) (stdGenFromPoint p))
+
+randomFromSeed :: Int -> Int -> Int
+randomFromSeed max seed = fst (randomR (0, max - 1) (mkStdGen seed))
+
+
