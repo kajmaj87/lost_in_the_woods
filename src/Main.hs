@@ -116,8 +116,11 @@ tileFromInt i | i < 1     = 't'
               | i < 5     = 'T'
               | otherwise = '.'
 
+seed :: Point -> Int
+seed (x, y) = 89 ^ abs x * 97 ^ abs y
+
 stdGenFromPoint :: Point -> StdGen
-stdGenFromPoint (x, y) = mkStdGen ((89 ^ abs (x)) * (97 ^ abs (y))) -- read (show x ++ "," ++ show y) :: StdGen
+stdGenFromPoint (x, y) = mkStdGen $ seed (x, y)
 
 randomFromPoint :: Int -> Point -> Int
 randomFromPoint max p = fst (randomR (0, max - 1) (stdGenFromPoint p))
