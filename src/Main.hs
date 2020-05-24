@@ -5,6 +5,7 @@ import           System.IO                      ( stdin
                                                 , BufferMode(..)
                                                 )
 import           System.Random.PCG
+import qualified Data.Map                      as M
 import           Control.Monad                  ( when )
 import           Control.Monad.ST
 
@@ -14,27 +15,43 @@ main :: IO ()
 main = do
   hSetBuffering stdin NoBuffering
   hSetEcho stdin False
-  mainLoop $ Game (10, -10)
+  mainLoop $ Game (10, -10) M.empty
 
 drawUI :: Game -> IO ()
 drawUI g = do
-  clearScreen ()
-  drawLevel g
+  draw $ M.differenceWith
+    (\new old -> if old == new then Nothing else Just new)
+    (levelMap g)
+    (lastMap g)
   drawPlayer g
   drawSummary 0 (-20) g
 
-drawLevel :: Game -> IO ()
-drawLevel g =
-  let px = fst (playerPostion g)
-      py = snd (playerPostion g)
-      inPlayerRange (x, y) r = (x - px) ^ 2 + 2 * (y - py) ^ 2 <= r * r
-      seenLevel r =
-          [ (x, y)
-          | x <- [px - r .. px + r]
-          , y <- [py - r .. py + r]
-          , inPlayerRange (x, y) r
-          ]
-  in  mapM_ drawTile (seenLevel 16)
+draw :: GameMap -> IO ()
+draw g = mapM_ (drawTile . mapElementToTile) (M.toList g)
+
+tileToMapElement :: Tile -> ((Int, Int), Char)
+tileToMapElement Tile { tilePosition = (x, y), tile = c } = ((x, y), c)
+
+mapElementToTile :: ((Int, Int), Char) -> Tile
+mapElementToTile ((x, y), c) = Tile { tilePosition = (x, y), tile = c }
+
+levelMap :: Game -> GameMap
+levelMap g =
+  let
+    p  = playerPostion g
+    px = fst p
+    py = snd p
+    inPlayerRange (x, y) r = (x - px) ^ 2 + 2 * (y - py) ^ 2 <= r * r
+    seenLevel r =
+      [ (x, y)
+      | x <- [px - r .. px + r]
+      , y <- [py - r .. py + r]
+      , inPlayerRange (x, y) r
+      ]
+    seenMap = M.fromList $ map (tileToMapElement . pointToTile) (seenLevel 16)
+  in
+    M.insert (px, py) '@' seenMap
+
 
 drawPlayer :: Game -> IO ()
 drawPlayer g = drawChar '@' (playerPostion g)
@@ -44,13 +61,11 @@ drawChar c p = case uncurry maybeMove p of
   Just escapeCode -> putStr $ escapeCode ++ [c]
   Nothing         -> return ()
 
+pointToTile :: Point -> Tile
+pointToTile p = Tile p (tileFromInt $ randomFromPoint 50 p)
 
-drawTile :: Point -> IO ()
-drawTile (x, y) =
-  let c = tileFromInt $ randomFromPoint 50 (x, y)
-
-  --if randomFromPoint 100 (x, y) < 2 then 't' else '.'
-  in  drawChar c (x, y)
+drawTile :: Tile -> IO ()
+drawTile Tile { tilePosition = (x, y), tile = c } = drawChar c (x, y)
 
 
 drawSummary :: Int -> Int -> Game -> IO ()
@@ -85,13 +100,14 @@ showPointPosition p =
 mainLoop :: Game -> IO ()
 mainLoop g = do
   drawUI g
-  key <- getKey
+  key       <- getKey
+  lastState <- return $ g { lastMap = levelMap g }
   when (key /= "q") $ case key of
-    "h" -> mainLoop (gameStep g (Move West))
-    "j" -> mainLoop (gameStep g (Move South))
-    "k" -> mainLoop (gameStep g (Move North))
-    "l" -> mainLoop (gameStep g (Move East))
-    _   -> mainLoop (gameStep g Wait)
+    "h" -> mainLoop (gameStep lastState (Move West))
+    "j" -> mainLoop (gameStep lastState (Move South))
+    "k" -> mainLoop (gameStep lastState (Move North))
+    "l" -> mainLoop (gameStep lastState (Move East))
+    _   -> mainLoop (gameStep lastState Wait)
 
 getKey :: IO String
 getKey = reverse <$> getKey' ""
@@ -104,8 +120,9 @@ getKey = reverse <$> getKey' ""
 
 -- PURE 
 type Point = (Int, Int)
-data Tile = Tile { tilePosition :: Point, tile :: Char }
-data Game = Game { playerPostion :: Point}
+type GameMap = M.Map Point Char
+data Tile = Tile { tilePosition :: Point, tile :: Char } deriving (Ord, Eq)
+data Game = Game { playerPostion :: Point, lastMap :: GameMap}
 
 data Dir = West | East | North | South
 data Event a = Move Dir | Wait
