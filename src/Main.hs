@@ -4,8 +4,9 @@ import           System.IO                      ( stdin
                                                 , hSetBuffering
                                                 , BufferMode(..)
                                                 )
-import           System.Random
+import           System.Random.PCG
 import           Control.Monad                  ( when )
+import           Control.Monad.ST
 
 -- IO 
 
@@ -33,19 +34,20 @@ drawLevel g =
           , y <- [py - r .. py + r]
           , inPlayerRange (x, y) r
           ]
-  in  mapM_ drawTile (seenLevel 8)
+  in  mapM_ drawTile (seenLevel 16)
 
 drawPlayer :: Game -> IO ()
 drawPlayer g = drawChar '@' (playerPostion g)
 
 drawChar :: Char -> Point -> IO ()
-drawChar c p = do
-  uncurry moveCursor p
-  putChar c
+drawChar c p = case uncurry maybeMove p of
+  Just escapeCode -> putStr $ escapeCode ++ [c]
+  Nothing         -> return ()
+
 
 drawTile :: Point -> IO ()
 drawTile (x, y) =
-  let c = tileFromInt $ randomFromPoint 100 (x, y)
+  let c = tileFromInt $ randomFromPoint 43 (x, y)
 
   --if randomFromPoint 100 (x, y) < 2 then 't' else '.'
   in  drawChar c (x, y)
@@ -63,9 +65,18 @@ clearScreen :: () -> IO ()
 clearScreen _ = putStr "\ESC[2J"
 
 moveCursor :: Int -> Int -> IO ()
-moveCursor x y =
-  let escapeCode = "[" ++ show (1 - y) ++ ";" ++ show (1 + x) ++ "f"
-  in  putStr $ "\ESC" ++ escapeCode
+moveCursor x y = case maybeMove x y of
+  Just escapeCode -> putStr escapeCode
+  Nothing         -> return ()
+
+maybeMove :: Int -> Int -> Maybe String
+maybeMove x y
+  | 1 - y > 0
+  , 1 + x > 0
+  = let escapeCode = "[" ++ show (1 - y) ++ ";" ++ show (1 + x) ++ "f"
+    in  Just $ "\ESC" ++ escapeCode
+  | otherwise
+  = Nothing
 
 showPointPosition :: Point -> IO ()
 showPointPosition p =
@@ -112,20 +123,26 @@ gameStep g (Move dir) = case dir of
 gameStep g Wait = g
 
 tileFromInt :: Int -> Char
-tileFromInt i | i < 1     = 't'
-              | i < 5     = 'T'
+tileFromInt i | i < 1     = '*'
               | otherwise = '.'
 
-seed :: Point -> Int
-seed (x, y) = 89 ^ abs x * 97 ^ abs y
+toNeutral :: Int -> Int
+toNeutral n | n < 0     = (-2) * n
+            | otherwise = 2 * n - 1
 
-stdGenFromPoint :: Point -> StdGen
-stdGenFromPoint (x, y) = mkStdGen $ seed (x, y)
+cantorPairing :: Point -> Int
+cantorPairing (x, y) = (x + y) * (x + y + 1) `div` 2 + y
+
+seedFromPoint :: Point -> Int
+--seedFromPoint (x, y) = 89 ^ abs x * 97 ^ abs y
+seedFromPoint (x, y) = cantorPairing (toNeutral x, toNeutral y)
 
 randomFromPoint :: Int -> Point -> Int
-randomFromPoint max p = fst (randomR (0, max - 1) (stdGenFromPoint p))
+randomFromPoint max p = randomFromSeed max (seedFromPoint p)
 
 randomFromSeed :: Int -> Int -> Int
-randomFromSeed max seed = fst (randomR (0, max - 1) (mkStdGen seed))
+randomFromSeed max seed = runST $ do
+  g <- initialize (fromIntegral seed) 0
+  uniformR (0, max - 1) g
 
 
