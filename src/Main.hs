@@ -47,7 +47,7 @@ drawChar c p = case uncurry maybeMove p of
 
 drawTile :: Point -> IO ()
 drawTile (x, y) =
-  let c = tileFromInt $ randomFromPoint 43 (x, y)
+  let c = tileFromInt $ randomFromPoint 50 (x, y)
 
   --if randomFromPoint 100 (x, y) < 2 then 't' else '.'
   in  drawChar c (x, y)
@@ -123,7 +123,8 @@ gameStep g (Move dir) = case dir of
 gameStep g Wait = g
 
 tileFromInt :: Int -> Char
-tileFromInt i | i < 1     = '*'
+tileFromInt i | i < 1     = 't'
+              | i < 4     = 'T'
               | otherwise = '.'
 
 toNeutral :: Int -> Int
